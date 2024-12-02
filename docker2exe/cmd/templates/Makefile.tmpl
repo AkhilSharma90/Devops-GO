@@ -1,0 +1,35 @@
+NAME = {{.Name}}
+OUTPUT = {{.Output}}
+MODULE = {{.Module}}
+IMAGE = {{.Image}}
+{{- if .Embed}}
+SOURCES = go.sum $(wildcard *.go) image.tar.gz
+{{- else}}
+SOURCES = go.sum $(wildcard *.go)
+{{- end}}
+TARGETS = {{range .Targets}} {{.}}{{end}}
+DOCKER ?= docker
+
+os = $(word 1, $(subst /, ,$@))
+arch = $(word 2, $(subst /, ,$@))
+
+ifeq ($(OS),Windows_NT)
+    BUILD_CMD = set GOOS=$(os)& set GOARCH=$(arch)& go build
+else
+    BUILD_CMD = GOOS=$(os) GOARCH=$(arch) go build
+endif
+
+.PHONY: all
+all: $(TARGETS)
+
+go.mod:
+	go mod init $(MODULE)
+
+go.sum: go.mod
+	go mod tidy
+
+image.tar.gz:
+	$(DOCKER) save $(IMAGE) | gzip > image.tar.gz
+
+$(TARGETS): $(SOURCES)
+	$(BUILD_CMD) -o "$(OUTPUT)/$(NAME)-$(os)-$(arch)$(if $(filter windows,$(os)),.exe,)"

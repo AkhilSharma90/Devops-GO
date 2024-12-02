@@ -1,0 +1,57 @@
+package main
+
+import (
+    "fmt"
+    "os"
+    {{- if .Embed}}
+    "embed"
+    {{- end}}
+)
+
+{{- if .Embed}}
+//go:embed image.tar.gz
+var embedded embed.FS
+{{- end}}
+
+func main() {
+    fmt.Println("Starting container execution...")
+    
+    shim := Shim{
+        Image: "{{.Image}}",
+        Workdir: "{{.Workdir}}",
+        Env: {{printf "%#v" .Env}},
+        Volumes: {{printf "%#v" .Volumes}},
+        Stdout: os.Stdout,
+        Stderr: os.Stderr,
+    }
+
+    if err := run(shim); err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
+}
+
+func run(shim Shim) error {
+    fmt.Println("Checking if image exists locally...")
+    if !shim.Exists() {
+        fmt.Println("Image not found locally, pulling...")
+        {{- if .Embed}}
+        image, err := embedded.Open("image.tar.gz")
+        if err != nil {
+            return fmt.Errorf("failed to open embedded image: %v", err)
+        }
+        defer image.Close()
+
+        if err := shim.Load(image); err != nil {
+            return fmt.Errorf("failed to load image: %v", err)
+        }
+        {{- else}}
+        if err := shim.Pull(); err != nil {
+            return fmt.Errorf("failed to pull image: %v", err)
+        }
+        {{- end}}
+    }
+
+    fmt.Println("Executing container with arguments:", os.Args[1:])
+    return shim.Exec(os.Args[1:])
+}
